@@ -21,6 +21,31 @@ from tensorflow.keras.layers import Dense
 
 # assert len(tf.config.list_physical_devices('GPU')) > 0
 
+class M:
+  def __init__(self):
+
+    ### Hyperparameter setting and optimization ###
+
+    # Optimization parameters:
+    self.num_training_iterations = 100  # Increase this to train longer
+    self.batch_size = 32  # Experiment between 1 and 64
+    self.seq_length = 100  # Experiment between 50 and 500
+    self.learning_rate = 5e-3  # Experiment between 1e-5 and 1e-1
+
+    # Model parameters: 
+    self.embedding_dim = 256 
+    self.rnn_units = 512  # Experiment between 1 and 2048
+    self.vectorized_songs = None
+    # Checkpoint location: 
+    self.checkpoint_dir = './training_checkpoints'
+    self.checkpoint_prefix = os.path.join(self.checkpoint_dir, "my_ckpt")
+    self.optimizer = None
+    self.model = None
+    self.vocab = None
+    self.i2c_a = None
+    self.c2i_d = None
+
+m = M()
 
 
 def LSTM(rnn_units): 
@@ -58,8 +83,74 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
 
   return model
 
+### Define optimizer and training operation ###
+
+@tf.function
+def train_step(x, y): 
+  # Use tf.GradientTape()
+  with tf.GradientTape() as tape:
+  
+    '''TODO: feed the current input into the model and generate predictions'''
+    # y_hat = predition
+    y_hat = m.model(x)
+  
+    '''TODO: compute the loss!'''
+    # loss is truth y against predition y_hat
+    loss = compute_loss(y, y_hat)
+
+  # Now, compute the gradients 
+  '''TODO: complete the function call for gradient computation. 
+      Remember that we want the gradient of the loss with respect all 
+      of the model parameters. 
+      HINT: use `model.trainable_variables` to get a list of all model
+      parameters.'''
+  grads = tape.gradient(loss, m.model.trainable_variables)
+  
+  # Apply the gradients to the optimizer so it can update the model accordingly
+  m.optimizer.apply_gradients(zip(grads, m.model.trainable_variables))
+  return loss
+
+
+def training():
+  '''TODO: instantiate a new model for training using the `build_model`
+    function and the hyperparameters created above.'''
+  m.model = build_model(len(m.vocab), m.embedding_dim, m.rnn_units, m.batch_size)
+
+  '''TODO: instantiate an optimizer with its learning rate.
+    Checkout the tensorflow website for a list of supported optimizers.
+    https://www.tensorflow.org/api_docs/python/tf/keras/optimizers/
+    Try using the Adam optimizer to start.'''
+  m.optimizer = tf.keras.optimizers.Adam(m.learning_rate)
+
+  
+  ##################
+  # Begin training!#
+  ##################
+
+  history = []
+  plotter = mdl.util.PeriodicPlotter(sec=2, xlabel='Iterations', ylabel='Loss')
+  if hasattr(tqdm, '_instances'): tqdm._instances.clear() # clear if it exists
+
+  for iter in tqdm(range(m.num_training_iterations)):
+
+    # Grab a batch and propagate it through the network
+    x_batch, y_batch = get_batch(m.vectorized_songs, m.seq_length, m.batch_size)
+    # y_batch = truth
+    loss = train_step(x_batch, y_batch)
+
+    # Update the progress bar
+    history.append(loss.numpy().mean())
+    plotter.plot(history)
+
+    # Update the model with the changed weights!
+    if iter % 100 == 0:     
+      m.model.save_weights(m.checkpoint_prefix)
+      
+  # Save the trained model and the weights
+  m.model.save_weights(m.checkpoint_prefix)
+
 def sample_model_build(vocab):
-  model = build_model(len(vocab), embedding_dim=256, rnn_units=1024, batch_size=32)
+  model = build_model(len(vocab), embedding_dim=256, rnn_units=512, batch_size=32)
   model.summary()
   return model
 '''
@@ -163,6 +254,10 @@ def untrained_prediction(model, vectorized_songs, c2i_d = None, i2c_a = None):
   print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
   print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
 
+  # to get preditions from the model, we sample from output distribution. 
+  # This means we are using a categorical distribution to sample over the predition.
+  # this gives a predition of the next character's index at each timestep.
+
   sampled_indices = tf.random.categorical(pred[0], num_samples=1)
   sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
   
@@ -171,15 +266,48 @@ def untrained_prediction(model, vectorized_songs, c2i_d = None, i2c_a = None):
   print("Next Char Predictions: \n", repr("".join(i2c_a[sampled_indices])))
 
 
+### Defining the loss function ### 2.5
+
+'''TODO: define the loss function to compute and return the loss between
+    the true labels and predictions (logits). Set the argument from_logits=True.'''
+def compute_loss(labels, logits):
+  loss = tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True) # TODO
+  return loss
+
+'''TODO: compute the loss using the true next characters from the example batch 
+    and the predictions from the untrained model several cells above'''
+
+def loss_prediction(model, vectorized_songs, c2i_d = None, i2c_a = None):
+  x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
+  pred = model(x)
+  example_batch_loss = compute_loss(y, pred)
+  print("Prediction shape: ", pred.shape, " # (batch_size, sequence_length, vocab_size)") 
+  print("scalar_loss:      ", example_batch_loss.numpy().mean())
+
+
+def model_training():
+  songs = mdl.lab1.load_training_data()
+  # Join our list of song strings into a single string containing all songs
+  songs_joined = "\n\n".join(songs) 
+  # m = M()
+  vs, c2i_d, i2c_a = vectorize_songs(songs_joined)
+  m.vocab = i2c_a
+  m.vectorized_songs = vs
+  m.c2i_d = c2i_d
+  m.i2c_a = i2c_a
+  training()
 
 def main():
+  model_training()
+  return
   songs = mdl.lab1.load_training_data()
   # Join our list of song strings into a single string containing all songs
   songs_joined = "\n\n".join(songs) 
   vs, c2i_d, i2c_a = vectorize_songs(songs_joined)
   m = sample_model_build(i2c_a)
   # test_prediction(m, vs, c2i_d,i2c_a)
-  untrained_prediction(m, vs, c2i_d,i2c_a)
+  # untrained_prediction(m, vs, c2i_d,i2c_a)
+  loss_prediction(m, vs, c2i_d,i2c_a)
   # batch_testing(vs)
   return
 
