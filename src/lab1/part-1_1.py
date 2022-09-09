@@ -84,6 +84,7 @@ def slice_tensor():
   row_vector = matrix[1] # 6 of 8 of 3
   # column_vector = matrix[:,0] # contiguous slice of first dimension, specific element of second dimension
   column_vector = matrix[:,:, 7] # contiguous slice of first dimension, contiguuous slice of second dimension, specific element of third dimension
+  # shape = [4 6 3]
   scalar = matrix[1,2]
   print("`row_vector`: {}".format(row_vector.numpy()))
   print("`column_vector` shape = {}:\n {}".format(tf.shape(column_vector).numpy(), column_vector.numpy()))
