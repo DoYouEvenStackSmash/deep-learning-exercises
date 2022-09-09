@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 from cgitb import text
+from distutils.command.build import build
 from operator import concat
 import tensorflow as tf 
 
@@ -15,6 +16,9 @@ import functools
 from IPython import display as ipythondisplay
 from tqdm import tqdm
 from tensorflow.keras.layers import Dense
+from batch_functions import *
+from vectorize_functions import *
+from model_predict_examples import *
 
 # Check that we are using a GPU, if not switch runtimes
 #   using Runtime > Change Runtime Type > GPU
@@ -57,6 +61,7 @@ def LSTM(rnn_units):
     stateful=True,
   )
 
+# generic model constructor
 '''TODO: Add LSTM and Dense layers to define the RNN model using the Sequential API.'''
 def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
   model = tf.keras.Sequential([
@@ -149,121 +154,61 @@ def training():
   # Save the trained model and the weights
   m.model.save_weights(m.checkpoint_prefix)
 
-def sample_model_build(vocab):
-  model = build_model(len(vocab), embedding_dim=256, rnn_units=512, batch_size=32)
-  model.summary()
-  return model
+# build initial model from global M m
+def build_inference_model():
+  m.model = build_model(len(m.vocab), m.embedding_dim, m.rnn_units, batch_size=1)
+  m.model.load_weights(tf.train.latest_checkpoint(m.checkpoint_dir))
+  m.model.build(tf.TensorShape([1, None]))
+  m.model.summary()
+
+
 '''
 # Build a simple model with default hyperparameters. You will get the 
 #   chance to change these later.
 model = build_model(len(vocab), embedding_dim=256, rnn_units=1024, batch_size=32)
 '''
-def text_vectorize_prep(vocab):
-  ### Define numerical representation of text ###
+# contrived model construction
+def sample_model_build(vocab):
+  model = build_model(len(vocab), embedding_dim=256, rnn_units=512, batch_size=32)
+  model.summary()
+  return model
 
-  # Create a mapping from character to unique index.
-  # For example, to get the index of the character "d", 
-  #   we can evaluate `char2idx["d"]`.  
-  char2idx = {u:i for i, u in enumerate(vocab)}
 
-  # Create a mapping from indices to characters. This is
-  #   the inverse of char2idx and allows us to convert back
-  #   from unique index to the character in our vocabulary.
-  idx2char = np.array(vocab)
-  ''' now we have our pair mapping
-  char2idx: char -> index in idx2char
-  idx2char: index -> char at idx2char index
-  '''
-  return char2idx, idx2char
+### Prediction of a generated song ###
 
-  # print('{')
-  # for char,_ in zip(char2idx, range(20)):
-  #   print('  {:4s}: {:3d},'.format(repr(char), char2idx[char]))
-  # print('  ...\n}')
-  
-def vectorize_string(all_songs_string, char2idx_dict, idx2char_arr = None):
-  np_str_arr = []
-  for i in range(len(all_songs_string)):
-    np_str_arr.append(char2idx_dict[all_songs_string[i]])
-  return np.array(np_str_arr)
+def generate_text(model, start_string, generation_length=1000):
+  # Evaluation step (generating ABC text using the learned RNN model)
 
-def vectorize_songs(concat_songs):
-  unique_notes = sorted(set(concat_songs))
-  c2i_dict,i2c_arr = text_vectorize_prep(unique_notes)
-  vectorized_songs = vectorize_string(concat_songs, c2i_dict)
-  assert isinstance(vectorized_songs, np.ndarray), "returned result should be a numpy array"
-  return vectorized_songs, c2i_dict, i2c_arr
+  '''TODO: convert the start string to numbers (vectorize)'''
+  input_eval = ['''TODO''']
+  input_eval = tf.expand_dims(input_eval, 0)
 
-'''
-  vectorized_songs is a concatenated string of integers, as a numpy array
-  seq_length is an integer defining the length of the sequences
-  batch_size is the number of sequences to choose in the batch
-'''
-def get_batch(vectorized_songs, seq_length, batch_size):
-  # the length of the vectorized songs string
-  # vectorized songs is a 1 dimensional np.array of n elements
-  
-  n = vectorized_songs.shape[0] - 1 # subtract 1 to prevent out of bounds in output batch
-  # randomly choose the starting indices for the examples in the training batch
-  idx = np.random.choice(n-seq_length, batch_size)
+  # Empty string to store our results
+  text_generated = []
 
-  '''TODO: construct a list of input sequences for the training batch'''
-  '''
-  As input, we want the sequences of seq_length starting at each index in idx
-  seqs = []
-  for i in idx:
-    seqs.append(vectorized_songs[i : i + seq_length])
-  seqs = [vectorized_songs[i : i + seq_length] for i in idx]
-  '''
-  
-  input_batch = [vectorized_songs[i : i + seq_length] for i in idx]
-  '''TODO: construct a list of output sequences for the training batch'''
-  '''
-  As output, we want the sequences of input, shifted to the right by 1.  Can this go out of bounds? no. as per n above
-  seqs = []
-  for i in idx:
-    seqs.append(vectorized_songs[i + 1 : i + seq_length + 1])
-  seqs = [vectorized_songs[i + 1 : i + seq_length + 1] for i in idx]
-  '''
-  output_batch = [vectorized_songs[i + 1 : i + seq_length + 1] for i in idx]
+  # Here batch size == 1
+  model.reset_states()
+  tqdm._instances.clear()
 
-  # x_batch, y_batch provide the true inputs and targets for network training
-  x_batch = np.reshape(input_batch, [batch_size, seq_length])
-  y_batch = np.reshape(output_batch, [batch_size, seq_length])
-  return x_batch, y_batch
-
-def batch_testing(vectorized_songs):
-  # Perform some simple tests to make sure your batch function is working properly! 
-  test_args = (vectorized_songs, 10, 2)
-  if not mdl.lab1.test_batch_func_types(get_batch, test_args) or \
-    not mdl.lab1.test_batch_func_shapes(get_batch, test_args) or \
-    not mdl.lab1.test_batch_func_next_step(get_batch, test_args): 
-    print("======\n[FAIL] could not pass tests")
-  else: 
-    print("======\n[PASS] passed all tests!")
-
-def test_prediction(model, vectorized_songs, c2i_d = None, i2c_a = None):
-  x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
-  pred = model(x)
-  print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
-  print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
-
-def untrained_prediction(model, vectorized_songs, c2i_d = None, i2c_a = None):
-  x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
-  pred = model(x)
-  print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
-  print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
-
-  # to get preditions from the model, we sample from output distribution. 
-  # This means we are using a categorical distribution to sample over the predition.
-  # this gives a predition of the next character's index at each timestep.
-
-  sampled_indices = tf.random.categorical(pred[0], num_samples=1)
-  sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
-  
-  print("Input: \n", str(repr("".join(i2c_a[x[0]]))))
-  print()
-  print("Next Char Predictions: \n", repr("".join(i2c_a[sampled_indices])))
+  for i in tqdm(range(generation_length)):
+      '''TODO: evaluate the inputs and generate the next character predictions'''
+      predictions = model('''TODO''')
+      
+      # Remove the batch dimension
+      predictions = tf.squeeze(predictions, 0)
+      
+      '''TODO: use a multinomial distribution to sample'''
+      predicted_id = tf.random.categorical('''TODO''', num_samples=1)[-1,0].numpy()
+      
+      # Pass the prediction along with the previous hidden state
+      #   as the next inputs to the model
+      input_eval = tf.expand_dims([predicted_id], 0)
+      
+      '''TODO: add the predicted character to the generated text!'''
+      # Hint: consider what format the prediction is in vs. the output
+      text_generated.append('''TODO''')
+    
+  return (start_string + ''.join(text_generated))
 
 
 ### Defining the loss function ### 2.5
@@ -297,9 +242,21 @@ def model_training():
   m.i2c_a = i2c_a
   training()
 
+def inference_model():
+  songs = mdl.lab1.load_training_data()
+  # Join our list of song strings into a single string containing all songs
+  songs_joined = "\n\n".join(songs) 
+  # m = M()
+  vs, c2i_d, i2c_a = vectorize_songs(songs_joined)
+  m.vocab = i2c_a
+  m.vectorized_songs = vs
+  m.c2i_d = c2i_d
+  m.i2c_a = i2c_a
+  build_inference_model()
+
 def main():
-  model_training()
-  return
+  # model_training()
+  # return
   songs = mdl.lab1.load_training_data()
   # Join our list of song strings into a single string containing all songs
   songs_joined = "\n\n".join(songs) 
@@ -307,7 +264,7 @@ def main():
   m = sample_model_build(i2c_a)
   # test_prediction(m, vs, c2i_d,i2c_a)
   # untrained_prediction(m, vs, c2i_d,i2c_a)
-  loss_prediction(m, vs, c2i_d,i2c_a)
+  # loss_prediction(m, vs, c2i_d,i2c_a)
   # batch_testing(vs)
   return
 
