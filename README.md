@@ -1,1 +1,1 @@
-# deep-learning-exercises
+landing page for mit deep learning labs
