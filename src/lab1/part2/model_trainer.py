@@ -16,9 +16,6 @@ from IPython import display as ipythondisplay
 from tqdm import tqdm
 from input_processing import *
 from tensorflow.keras.layers import Dense
-from batch_functions import *
-from vectorize_functions import *
-from model_predict_examples import *
 from batch_processing import *
 from assertion_tests import *
 from model_functions import *
