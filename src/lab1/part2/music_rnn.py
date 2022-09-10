@@ -67,21 +67,16 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
   model = tf.keras.Sequential([
     # Layer 1: Embedding layer to transform indices into dense vectors 
     #   of a fixed embedding size
-    #input dim = vocab_size
-    # embedding_dim = embedding_dim = output dim
     
     #  Input layer, trainable lookup table that maps the numbers of each character to a 
     #  vector with embedding_dim dimensions. cat_one representation
     tf.keras.layers.Embedding(vocab_size, embedding_dim, batch_input_shape=[batch_size, None]),
 
     # Layer 2: LSTM with `rnn_units` number of units. 
-    # TODO: Call the LSTM function defined above to add this layer.
     LSTM(rnn_units),
 
     # Layer 3: Dense (fully-connected) layer that transforms the LSTM output
     #   into the vocabulary size. 
-    # TODO: Add the Dense layer.
-    # '''TODO: DENSE LAYER HERE'''
     # this transforms some input Tensor into a 1-D tensor
     Dense(vocab_size)
   ])
@@ -263,7 +258,7 @@ def main():
   vs, c2i_d, i2c_a = vectorize_songs(songs_joined)
   m = sample_model_build(i2c_a)
   # test_prediction(m, vs, c2i_d,i2c_a)
-  # untrained_prediction(m, vs, c2i_d,i2c_a)
+  untrained_prediction(m, vs, c2i_d,i2c_a)
   # loss_prediction(m, vs, c2i_d,i2c_a)
   # batch_testing(vs)
   return
