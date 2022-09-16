@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from pyexpat import model
 import tensorflow as tf
 import mitdeeplearning as mdl
 
@@ -8,6 +9,9 @@ import random
 from tqdm import tqdm
 
 from p1_1_mnist import data_loader
+import os
+checkpoint_dir = './training_checkpoints'
+checkpoint_prefix = os.path.join(checkpoint_dir, "my_ckpt")
 
 def build_cnn_model():
   model = tf.keras.Sequential([
@@ -34,7 +38,7 @@ EPOCHS = 5
 BATCH_SIZE = 64
 def cnn_builder():
   cnn_model = build_cnn_model()
-  cnn_model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=1e-1),
+  cnn_model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=5e-1),
                 loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
   return cnn_model
@@ -92,13 +96,62 @@ def visualization_driver():
   train_images, train_labels, test_images, test_labels = data_loader()
   cnn_model = cnn_builder()
   cnn_trainer(cnn_model, train_images, train_labels)
+  cnn_model.save_weights(checkpoint_prefix)
+  return
   p = cnn_predictions(cnn_model, test_images)
   # visualize_classification_results(p, test_images, test_labels)
   show_many_images(p, test_images, test_labels, 40)
 
+def training_2_point_0():
+  # Rebuild the CNN model
+  cnn_model = build_cnn_model()
+  train_images, train_labels, test_images, test_labels = data_loader()
 
+  batch_size = 12
+  loss_history = mdl.util.LossHistory(smoothing_factor=0.95) # to record the evolution of the loss
+  plotter = mdl.util.PeriodicPlotter(sec=2, xlabel='Iterations', ylabel='Loss', scale='semilogy')
+  optimizer = tf.keras.optimizers.SGD(learning_rate=5e-1) # define our optimizer
+
+  if hasattr(tqdm, '_instances'): tqdm._instances.clear() # clear if it exists
+
+  for idx in tqdm(range(0, train_images.shape[0], batch_size)):
+    # First grab a batch of training data and convert the input images to tensors
+    (images, labels) = (train_images[idx:idx+batch_size], train_labels[idx:idx+batch_size])
+    images = tf.convert_to_tensor(images, dtype=tf.float32)
+
+    # GradientTape to record differentiation operations
+    with tf.GradientTape() as tape:
+      #'''TODO: feed the images into the model and obtain the predictions'''
+      logits = cnn_model(images)
+
+      #'''TODO: compute the categorical cross entropy loss
+      loss_value = tf.keras.backend.sparse_categorical_crossentropy(labels, logits)
+
+    loss_history.append(loss_value.numpy().mean()) # append the loss to the loss_history record
+    plotter.plot(loss_history.get())
+
+    # Backpropagation
+    '''TODO: Use the tape to compute the gradient against all parameters in the CNN model.
+        Use cnn_model.trainable_variables to access these parameters.''' 
+    grads = tape.gradient(loss_value, cnn_model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, cnn_model.trainable_variables))
+  
+  cnn_model.compile(optimizer, loss='sparse_categorical_crossentropy',metrics=['accuracy'])
+  cnn_evaluator(cnn_model, test_images, test_labels)
+
+def model_load_test():
+  train_images, train_labels, test_images, test_labels = data_loader()
+  cnn_model = cnn_builder()
+  cnn_evaluator(cnn_model, test_images,test_labels)
+  
+  cnn_model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
+  cnn_evaluator(cnn_model, test_images, test_labels)
+
+  # cnn_model.build()
 def main():
-  visualization_driver()
+  # visualization_driver()
+  training_2_point_0()
+  # model_load_test()
   return
   train_images, train_labels, test_images, test_labels = data_loader()
   # print(len(test_images))
