@@ -1,0 +1,11 @@
+  
+optimizer=tf.keras.optimizers.SGD(learning_rate=1e-1)
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
+accuracy = 0.9908999800682068
+
+
+optimizer=tf.keras.optimizers.SGD(learning_rate=1e-2),
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
+accuracy = 0.9754999876022339
